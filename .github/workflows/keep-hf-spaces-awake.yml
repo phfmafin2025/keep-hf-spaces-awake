@@ -2,14 +2,16 @@ name: Keep HF Spaces Awake (every 8h)
 
 on:
   schedule:
-    - cron: "0 */8 * * *"   # Cada 8 horas (00:00, 08:00, 16:00 UTC)
-  workflow_dispatch:        # Permite ejecutarlo manualmente también
+    - cron: "0 */8 * * *"   # Cada 8 horas (UTC)
+  workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Hugging Face Spaces
+      - name: Ping Hugging Face Spaces (collect results)
+        id: ping
+        shell: bash
         run: |
           set -u
           urls=(
@@ -17,7 +19,100 @@ jobs:
             "https://cesparzaf-fraqx-anpr-demo.hf.space/"
             "https://cesparzaf-forecast-chronos.hf.space/"
           )
+
+          ok=()
+          ko=()
+
+          start_time=$(date +%s)
+
           for u in "${urls[@]}"; do
             echo "👉 Pinging $u"
-            curl -fsSL --max-time 30 "$u" -o /dev/null || echo "⚠️  Ping failed for $u (continuing)"
+            if curl -fsSL --max-time 30 "$u" -o /dev/null; then
+              ok+=("$u")
+            else
+              echo "⚠️  Ping failed for $u"
+              ko+=("$u")
+            fi
           done
+
+          end_time=$(date +%s)
+          duration=$((end_time - start_time))
+          local_time=$(TZ="America/Mexico_City" date '+%d/%m/%Y %H:%M:%S')
+
+          {
+            echo 'OK_LIST<<EOF'
+            printf '%s\n' "${ok[@]:-}"
+            echo 'EOF'
+            echo 'KO_LIST<<EOF'
+            printf '%s\n' "${ko[@]:-}"
+            echo 'EOF'
+            echo "OK_COUNT=${#ok[@]}"
+            echo "KO_COUNT=${#ko[@]}"
+            echo "TOTAL=${#urls[@]}"
+            echo "DURATION=${duration}"
+            echo "LOCAL_TIME=${local_time}"
+          } >> "$GITHUB_ENV"
+
+          {
+            echo "### Keep-alive summary"
+            echo "- Total: ${#urls[@]}"
+            echo "- ✅ OK: ${#ok[@]}"
+            echo "- ❌ Fails: ${#ko[@]}"
+            echo "- ⏱️ Duración: ${duration}s"
+            echo "- 🕒 Hora local: ${local_time} (CDMX)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Notify Telegram
+        if: always()
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID:  ${{ secrets.TELEGRAM_CHAT_ID }}
+          STATUS:   ${{ job.status }}
+          RUN_URL:  ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPO:     ${{ github.repository }}
+          WF:       ${{ github.workflow }}
+          RUN_NO:   ${{ github.run_number }}
+          ACTOR:    ${{ github.actor }}
+          OK_COUNT: ${{ env.OK_COUNT }}
+          KO_COUNT: ${{ env.KO_COUNT }}
+          TOTAL:    ${{ env.TOTAL }}
+          OK_LIST:  ${{ env.OK_LIST }}
+          KO_LIST:  ${{ env.KO_LIST }}
+          DURATION: ${{ env.DURATION }}
+          LOCAL_TIME: ${{ env.LOCAL_TIME }}
+        run: |
+          if [ "$STATUS" = "success" ]; then EMOJI="✅"; else EMOJI="❌"; fi
+
+          format_list () {
+            if [ -z "$1" ]; then
+              echo "—"
+            else
+              while IFS= read -r line; do
+                [ -n "$line" ] && echo "• $line"
+              done <<< "$1"
+            fi
+          }
+
+          OK_TXT="$(format_list "$OK_LIST")"
+          KO_TXT="$(format_list "$KO_LIST")"
+
+          TEXT="$EMOJI $STATUS — $WF #$RUN_NO
+Repo: $REPO
+By: $ACTOR
+Run: $RUN_URL
+
+🕒 Hora local (CDMX): $LOCAL_TIME
+⏱️ Duración total: ${DURATION}s
+
+Total: $TOTAL  |  ✅ OK: $OK_COUNT  |  ❌ Fails: $KO_COUNT
+
+OK:
+$OK_TXT
+
+Fails:
+$KO_TXT"
+
+          curl -sS -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
+            -d chat_id="$CHAT_ID" \
+            -d text="$TEXT" \
+            -d disable_web_page_preview=true
