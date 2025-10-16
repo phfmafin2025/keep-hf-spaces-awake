@@ -62,24 +62,24 @@ jobs:
             echo "- 🕒 Hora local: ${local_time} (CDMX)"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Notify Telegram
+            - name: Notify Telegram
         if: always()
         env:
-          BOT_TOKEN: "${{ secrets.TELEGRAM_BOT_TOKEN }}"
-          CHAT_ID:  "${{ secrets.TELEGRAM_CHAT_ID }}"
-          STATUS:   "${{ job.status }}"
-          RUN_URL:  "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          REPO:     "${{ github.repository }}"
-          WF:       "${{ github.workflow }}"
-          RUN_NO:   "${{ github.run_number }}"
-          ACTOR:    "${{ github.actor }}"
-          OK_COUNT: "${{ env.OK_COUNT }}"
-          KO_COUNT: "${{ env.KO_COUNT }}"
-          TOTAL:    "${{ env.TOTAL }}"
-          OK_LIST:  "${{ env.OK_LIST }}"
-          KO_LIST:  "${{ env.KO_LIST }}"
-          DURATION: "${{ env.DURATION }}"
-          LOCAL_TIME: "${{ env.LOCAL_TIME }}"
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          STATUS: ${{ job.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          WF: ${{ github.workflow }}
+          RUN_NO: ${{ github.run_number }}
+          ACTOR: ${{ github.actor }}
+          OK_COUNT: ${{ env.OK_COUNT }}
+          KO_COUNT: ${{ env.KO_COUNT }}
+          TOTAL: ${{ env.TOTAL }}
+          OK_LIST: ${{ env.OK_LIST }}
+          KO_LIST: ${{ env.KO_LIST }}
+          DURATION: ${{ env.DURATION }}
+          LOCAL_TIME: ${{ env.LOCAL_TIME }}
         shell: bash
         run: |
           format_list () {
