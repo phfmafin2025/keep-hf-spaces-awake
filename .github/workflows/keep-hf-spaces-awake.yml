@@ -1,71 +1,3 @@
-name: Keep HF Spaces Awake (every 8h)
-
-on:
-  schedule:
-    - cron: "0 */8 * * *"   # Cada 8 horas (UTC)
-  workflow_dispatch:
-
-jobs:
-  ping:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Ping Hugging Face Spaces (collect results)
-        id: ping
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # ---- URLs a mantener despiertas ----
-          urls=(
-            "https://cesparzaf-fraqx-financial-v2.hf.space/"
-            "https://cesparzaf-fraqx-anpr-demo.hf.space/"
-            "https://cesparzaf-forecast-chronos.hf.space/"
-          )
-
-          ok=()
-          ko=()
-
-          start_time=$(date +%s)
-
-          for u in "${urls[@]}"; do
-            echo "👉 Pinging $u"
-            if curl -fsSL --max-time 30 "$u" -o /dev/null; then
-              ok+=("$u")
-            else
-              echo "⚠️  Ping failed for $u"
-              ko+=("$u")
-            fi
-          done
-
-          end_time=$(date +%s)
-          duration=$((end_time - start_time))
-          local_time=$(TZ="America/Mexico_City" date '+%d/%m/%Y %H:%M:%S')
-
-          # ---- Exporta resultados al entorno del job ----
-          {
-            echo 'OK_LIST<<__EOF__'
-            printf '%s\n' "${ok[@]:-}"
-            echo '__EOF__'
-            echo 'KO_LIST<<__EOF__'
-            printf '%s\n' "${ko[@]:-}"
-            echo '__EOF__'
-            echo "OK_COUNT=${#ok[@]}"
-            echo "KO_COUNT=${#ko[@]}"
-            echo "TOTAL=${#urls[@]}"
-            echo "DURATION=${duration}"
-            echo "LOCAL_TIME=${local_time}"
-          } >> "$GITHUB_ENV"
-
-          # ---- Resumen para la UI de Actions ----
-          {
-            echo "### Keep-alive summary"
-            echo "- Total: ${#urls[@]}"
-            echo "- ✅ OK: ${#ok[@]}"
-            echo "- ❌ Fails: ${#ko[@]}"
-            echo "- ⏱️ Duración: ${duration}s"
-            echo "- 🕒 Hora local: ${local_time} (CDMX)"
-          } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Notify Telegram
         if: always()
         env:
@@ -88,7 +20,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Formatea listas para texto (viñetas)
           format_list () {
             if [ -z "${1:-}" ]; then
               echo "—"
@@ -108,27 +39,15 @@ jobs:
           OK_TXT="$(format_list "$OK_LIST")"
           KO_TXT="$(format_list "$KO_LIST")"
 
-          # Construye mensaje con HEREDOC (delimitador único y limpio)
-          TEXT=$(cat <<__MSG__
-$EMOJI $STATUS — $WF #$RUN_NO
-Repo: $REPO
-By: $ACTOR
-Run: $RUN_URL
+          TEXT="$EMOJI $STATUS — $WF #$RUN_NO\n\
+Repo: $REPO\n\
+By: $ACTOR\n\
+Run: $RUN_URL\n\n\
+🕒 Hora local (CDMX): $LOCAL_TIME\n\
+⏱️ Duración total: ${DURATION}s\n\n\
+Total: $TOTAL  |  ✅ OK: $OK_COUNT  |  ❌ Fails: $KO_COUNT\n\n\
+OK:\n$OK_TXT\n\nFails:\n$KO_TXT"
 
-🕒 Hora local (CDMX): $LOCAL_TIME
-⏱️ Duración total: ${DURATION}s
-
-Total: $TOTAL  |  ✅ OK: $OK_COUNT  |  ❌ Fails: $KO_COUNT
-
-OK:
-$OK_TXT
-
-Fails:
-$KO_TXT
-__MSG__
-)
-
-          # Envía a Telegram (urlencode para respetar saltos de línea y caracteres)
           curl -sS -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             -d chat_id="$CHAT_ID" \
             --data-urlencode text="$TEXT" \
