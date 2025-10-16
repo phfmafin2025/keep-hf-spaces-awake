@@ -13,9 +13,9 @@ jobs:
         id: ping
         shell: bash
         run: |
-          set -u
+          set -euo pipefail
 
-          # URLs a mantener despiertas
+          # ---- URLs a mantener despiertas ----
           urls=(
             "https://cesparzaf-fraqx-financial-v2.hf.space/"
             "https://cesparzaf-fraqx-anpr-demo.hf.space/"
@@ -41,14 +41,14 @@ jobs:
           duration=$((end_time - start_time))
           local_time=$(TZ="America/Mexico_City" date '+%d/%m/%Y %H:%M:%S')
 
-          # Exporta resultados a variables de entorno del job
+          # ---- Exporta resultados al entorno del job ----
           {
-            echo 'OK_LIST<<EOF'
+            echo 'OK_LIST<<__EOF__'
             printf '%s\n' "${ok[@]:-}"
-            echo 'EOF'
-            echo 'KO_LIST<<EOF'
+            echo '__EOF__'
+            echo 'KO_LIST<<__EOF__'
             printf '%s\n' "${ko[@]:-}"
-            echo 'EOF'
+            echo '__EOF__'
             echo "OK_COUNT=${#ok[@]}"
             echo "KO_COUNT=${#ko[@]}"
             echo "TOTAL=${#urls[@]}"
@@ -56,7 +56,7 @@ jobs:
             echo "LOCAL_TIME=${local_time}"
           } >> "$GITHUB_ENV"
 
-          # Resumen visible en la UI de Actions
+          # ---- Resumen para la UI de Actions ----
           {
             echo "### Keep-alive summary"
             echo "- Total: ${#urls[@]}"
@@ -86,20 +86,19 @@ jobs:
           LOCAL_TIME: ${{ env.LOCAL_TIME }}
         shell: bash
         run: |
-          set -u
+          set -euo pipefail
 
-          # Formatea listas para texto
+          # Formatea listas para texto (viñetas)
           format_list () {
             if [ -z "${1:-}" ]; then
               echo "—"
             else
               while IFS= read -r line; do
-                [ -n "$line" ] && echo "• $line"
+                [ -n "$line" ] && printf '• %s\n' "$line"
               done <<< "$1"
             fi
           }
 
-          # Emoji según estado del job
           if [ "$STATUS" = "success" ]; then
             EMOJI="✅"
           else
@@ -109,8 +108,8 @@ jobs:
           OK_TXT="$(format_list "$OK_LIST")"
           KO_TXT="$(format_list "$KO_LIST")"
 
-          # Construye el mensaje con HEREDOC (evita romper YAML por comillas/saltos)
-          TEXT=$(cat <<EOF
+          # Construye mensaje con HEREDOC (delimitador único y limpio)
+          TEXT=$(cat <<__MSG__
 $EMOJI $STATUS — $WF #$RUN_NO
 Repo: $REPO
 By: $ACTOR
@@ -126,10 +125,10 @@ $OK_TXT
 
 Fails:
 $KO_TXT
-EOF
+__MSG__
 )
 
-          # Envía a Telegram. Se usa --data-urlencode para respetar saltos de línea.
+          # Envía a Telegram (urlencode para respetar saltos de línea y caracteres)
           curl -sS -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
             -d chat_id="$CHAT_ID" \
             --data-urlencode text="$TEXT" \
